@@ -38,7 +38,7 @@ jobs:
           test -f ScrollPress.xcodeproj/project.pbxproj
           test -d ScrollPress
           test -f ScrollPress/Info.plist
-          echo "=== Xcode targets ==="
+          echo "=== Schemes ==="
           xcodebuild -list -project ScrollPress.xcodeproj
           echo "=== App icon ==="
           ls -la ScrollPress/Assets.xcassets/AppIcon.appiconset/ || true
@@ -51,7 +51,7 @@ jobs:
           set +e
           xcodebuild \
             -project ScrollPress.xcodeproj \
-            -target ScrollPress \
+            -scheme ScrollPress \
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
