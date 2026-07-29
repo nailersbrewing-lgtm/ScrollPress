@@ -1,5 +1,4 @@
 # Build unsigned IPA for Sideloadly (Windows) or Mac installers.
-# Intended repo root = the ScrollPress folder (contains .xcodeproj).
 
 name: Build ScrollPress IPA
 
@@ -10,31 +9,68 @@ on:
 
 jobs:
   build-ipa:
-    runs-on: macos-14
+    runs-on: macos-15
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+      - name: Find project root
+        id: root
+        run: |
+          set -euo pipefail
+          echo "=== Repo contents ==="
+          ls -la
+          if [ -f "ScrollPress.xcodeproj/project.pbxproj" ]; then
+            echo "root=." >> "$GITHUB_OUTPUT"
+          elif [ -f "ScrollPress/ScrollPress.xcodeproj/project.pbxproj" ]; then
+            echo "root=ScrollPress" >> "$GITHUB_OUTPUT"
+          else
+            echo "ERROR: ScrollPress.xcodeproj not found at repo root."
+            find . -maxdepth 4 -name "*.xcodeproj" || true
+            exit 1
+          fi
 
-      - name: Build without local code signature
+      - name: Verify project files
+        working-directory: ${{ steps.root.outputs.root }}
+        run: |
+          set -euo pipefail
+          test -f ScrollPress.xcodeproj/project.pbxproj
+          test -d ScrollPress
+          test -f ScrollPress/Info.plist
+          echo "=== Xcode targets ==="
+          xcodebuild -list -project ScrollPress.xcodeproj
+          echo "=== App icon ==="
+          ls -la ScrollPress/Assets.xcassets/AppIcon.appiconset/ || true
+
+      - name: Build (unsigned)
+        working-directory: ${{ steps.root.outputs.root }}
         run: |
           set -euo pipefail
           mkdir -p build
+          set +e
           xcodebuild \
             -project ScrollPress.xcodeproj \
-            -scheme ScrollPress \
+            -target ScrollPress \
             -configuration Release \
             -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            build
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="" \
+            build 2>&1 | tee build/xcodebuild.log
+          STATUS=${PIPESTATUS[0]}
+          if [ "$STATUS" -ne 0 ]; then
+            echo "===== LAST 80 LINES OF BUILD LOG ====="
+            tail -n 80 build/xcodebuild.log
+            exit "$STATUS"
+          fi
 
       - name: Package IPA
+        working-directory: ${{ steps.root.outputs.root }}
         run: |
           set -euo pipefail
           APP_PATH=$(find build/DerivedData/Build/Products -name "ScrollPress.app" -print -quit)
@@ -54,6 +90,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ScrollPress-ipa
-          path: build/ScrollPress.ipa
+          path: ${{ steps.root.outputs.root }}/build/ScrollPress.ipa
           if-no-files-found: error
           retention-days: 14
