@@ -1,1 +1,59 @@
+# Build unsigned IPA for Sideloadly (Windows) or Mac installers.
+# Intended repo root = the ScrollPress folder (contains .xcodeproj).
 
+name: Build ScrollPress IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+
+jobs:
+  build-ipa:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+      - name: Build without local code signature
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          xcodebuild \
+            -project ScrollPress.xcodeproj \
+            -scheme ScrollPress \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Package IPA
+        run: |
+          set -euo pipefail
+          APP_PATH=$(find build/DerivedData/Build/Products -name "ScrollPress.app" -print -quit)
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: ScrollPress.app not found"
+            find build/DerivedData -type d -name "*.app" || true
+            exit 1
+          fi
+          echo "Packaging: $APP_PATH"
+          rm -rf build/Payload
+          mkdir -p build/Payload
+          cp -R "$APP_PATH" build/Payload/
+          (cd build && zip -qr ScrollPress.ipa Payload)
+          ls -lh build/ScrollPress.ipa
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ScrollPress-ipa
+          path: build/ScrollPress.ipa
+          if-no-files-found: error
+          retention-days: 14
