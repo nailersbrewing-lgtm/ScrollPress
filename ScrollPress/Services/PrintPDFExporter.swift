@@ -4,6 +4,7 @@ enum PrintPDFExporter {
     static func makePDF(
         messages: [CapturedMessage],
         threadLabel: String,
+        language: AppLanguage = .english,
         exportedAt: Date = Date()
     ) throws -> URL {
         let pageWidth: CGFloat = 612
@@ -68,9 +69,13 @@ enum PrintPDFExporter {
                 let bubbleWidth = contentWidth * 0.72
                 let textHeight = message.text.height(width: bubbleWidth - 24, font: bodyFont)
                 let bubbleHeight = max(36, textHeight + 20)
-                let stamp = [message.timestampText, message.directionLabel]
-                    .compactMap { $0 }
-                    .joined(separator: " • ")
+                let direction = message.directionLabel(language: language)
+                var stampParts: [String] = []
+                if let timestamp = message.timestampText {
+                    stampParts.append(timestamp)
+                }
+                stampParts.append(direction)
+                let stamp = stampParts.joined(separator: " • ")
                 let stampHeight = stamp.isEmpty ? 0 : stamp.height(width: contentWidth, font: tinyFont)
                 ensureSpace(bubbleHeight + stampHeight + 20)
 
@@ -104,7 +109,7 @@ enum PrintPDFExporter {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let fileName = "ScrollPress-\(safeName.isEmpty ? "Thread" : safeName).pdf"
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
-        try data.write(to: url, options: .atomic)
+        try data.write(to: url, options: Data.WritingOptions.atomic)
         return url
     }
 }
